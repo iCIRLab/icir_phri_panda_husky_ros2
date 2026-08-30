@@ -72,11 +72,11 @@ If you use this code, please cite:
 ## Package Structure
 
 ```
-icir_phri_ws/src/
+icir_phri_ros2_ws/src/
 ├── icir_phri_panda_husky/       # Main controller (this repo)
 │   ├── src/
-│   │   ├── phri_real.cpp        # Real robot controller plugin
 │   │   ├── phri_simul.cpp       # Simulation controller node
+│   │   ├── phri_real.cpp        # Real robot controller plugin (not ported yet)
 │   │   └── panda_husky_hqp.cpp  # Whole-body QP controller: task & trajectory management
 │   └── python/
 │       ├── ns1_real.py          # CLI for real robot
@@ -90,16 +90,20 @@ icir_phri_ws/src/
 ├── icir_trajectory_smoother/    # Time-optimal trajectory generation
 ├── icir_qpoases/                # qpOASES solver wrapper
 ├── icir_phri_msgs/              # Custom ROS messages
-├── icir_phri_viz/               # Rviz visualization
 ├── icir_robots_description/     # Robot URDF/mesh descriptions
 │   ├── icir_panda_description/
 │   ├── icir_panda_husky_description/
 │   └── icir_robotiq_2f_85_description/
-├── icir_mujoco_ros/             # MuJoCo-ROS bridge (simulation only)
-├── franka_ros/                  # Franka ROS driver (v0.8.1)
-├── husky/                       # Husky ROS driver
-└── icir_robotiq/                # Robotiq gripper driver
+├── mujoco_ros2_control/         # MuJoCo simulation backend (branch icir_phri_panda_husky_ros2)
+└── mujoco_vendor/               # Builds MuJoCo from source
 ```
+
+The directory names above are the package names; the repositories they come from carry the
+`_ros2` suffix (see [2. Installation](#2-installation)).
+
+Not part of this workspace yet — still ROS 1 only: `franka_ros`, `husky`, `icir_robotiq`
+(real robot drivers), `icir_phri_viz` (Rviz visualization) and `icir_mujoco_ros`
+(the ROS 1 MuJoCo bridge, replaced by `mujoco_ros2_control`).
 
 ---
 
@@ -107,10 +111,11 @@ icir_phri_ws/src/
 
 | | Robot PC | User PC |
 |---|---|---|
-| **OS** | Ubuntu 18.04 | Ubuntu 20.04 |
-| **ROS** | Melodic (tested) | Noetic |
+| **OS** | Ubuntu 22.04 | Ubuntu 22.04 |
+| **ROS** | Humble | Humble |
 
-> Robot PC is also compatible with ROS Noetic. The current setup is tested on Melodic.
+> This is the ROS 2 Humble port. The ROS 1 (Melodic/Noetic) version lives in the original
+> repositories without the `_ros2` suffix.
 
 ### External Libraries (Robot PC)
 
@@ -118,64 +123,78 @@ icir_phri_ws/src/
 |---------|---------|---------|
 | pinocchio | — | See [official guide](https://stack-of-tasks.github.io/pinocchio/download.html) |
 | eigen3 | — | `sudo apt install libeigen3-dev` |
-| eiquadprog | — | `sudo apt install ros-melodic-eiquadprog` |
+| eiquadprog | — | `sudo apt install ros-humble-eiquadprog` |
 | libfranka | v0.9.0 | See [compatibility guide](https://frankarobotics.github.io/docs/compatibility.html) |
 | franka_ros | v0.8.1 | — |
 | Franka robot system | v4.2.1 | — |
 
 ### MuJoCo (Simulation only)
 
-v2.0 (`mjpro200`) — free license key available at `https://www.roboti.us/file/mjkey.txt`, must be placed at `~/.mujoco/mjkey.txt`
+No manual install and no license key. `mujoco_vendor` builds MuJoCo from source as part of
+`colcon build`. The ROS 1 bridge `icir_mujoco_ros` and its bundled `mjpro200` SDK are no
+longer used — `mujoco_ros2_control` replaces them.
 
 ---
 
 ## 2. Installation
 
-Clone all packages into your catkin workspace `src/` folder.
+Clone all packages into your colcon workspace `src/` folder.
 
 ```bash
-cd ~/icir_phri_ws/src
+mkdir -p ~/icir_phri_ros2_ws/src
+cd ~/icir_phri_ros2_ws/src
 ```
 
 ### Controller & Algorithm
 ```bash
-git clone https://github.com/iCIRLab/icir_qpoases.git
-git clone https://github.com/iCIRLab/icir_hqp_controller.git
-git clone https://github.com/iCIRLab/icir_trajectory_smoother.git 
-git clone https://github.com/iCIRLab/icir_path_planner.git  
+git clone https://github.com/iCIRLab/icir_qpoases_ros2.git
+git clone https://github.com/iCIRLab/icir_hqp_controller_ros2.git
+git clone https://github.com/iCIRLab/icir_trajectory_smoother_ros2.git
+git clone https://github.com/iCIRLab/icir_path_planner_ros2.git
 ```
 
 ### Robot Model & Simulator
 ```bash
-git clone https://github.com/iCIRLab/franka_ros.git
-git clone https://github.com/iCIRLab/husky.git 
-git clone https://github.com/iCIRLab/icir_robotiq.git  #pymodbuss<2.5.3 required
-git clone https://github.com/iCIRLab/icir_robots_description.git
-git clone https://github.com/iCIRLab/icir_mujoco_ros.git 
+git clone https://github.com/iCIRLab/icir_robots_description_ros2.git
+git clone https://github.com/iCIRLab/mujoco_vendor.git
+git clone -b icir_phri_panda_husky_ros2 https://github.com/iCIRLab/mujoco_ros2_control.git
 ```
+
+> `mujoco_ros2_control` **must** be cloned from the `icir_phri_panda_husky_ros2` branch.
+> The `iCIR_custom` branch is pinned by `icir_tutorial_pinocchio_ros2`, and the two branches
+> ship incompatible versions of `MujocoRosInterfacePlugin` — the topic names, the QoS profile,
+> and the contents of `joint_states` all differ. Mixing them fails silently: the topics simply
+> never match and no data arrives.
 
 ### Object Estimation & Messages
 ```bash
-git clone https://github.com/iCIRLab/icir_object_estimation.git
-git clone https://github.com/iCIRLab/icir_phri_msgs.git
+git clone https://github.com/iCIRLab/icir_object_estimation_ros2.git
+git clone https://github.com/iCIRLab/icir_phri_msgs_ros2.git
 ```
 
-### pHRI Task & Visualization
+### pHRI Task
 ```bash
-git clone https://github.com/iCIRLab/icir_phri_panda_husky.git
-git clone https://github.com/iCIRLab/icir_phri_viz.git
+git clone https://github.com/iCIRLab/icir_phri_panda_husky_ros2.git
 ```
 
 ### Build
 ```bash
-cd ~/icir_phri_ws
-catkin_make
-source devel/setup.bash
+cd ~/icir_phri_ros2_ws
+rosdep install --from-paths src --ignore-src -r -y
+colcon build --symlink-install
+source install/setup.bash
 ```
+
+> **Real robot drivers are not ported yet.** `franka_ros`, `husky`, `icir_robotiq` and
+> `icir_phri_viz` are still ROS 1 only, so sections 3 and 4.2 below describe the ROS 1 setup
+> and do not apply to this workspace. Simulation (section 4.1) is the supported path.
 
 ---
 
 ## 3. Setup
+
+> Sections 3.1–3.3 cover the real robot and are still ROS 1. Simulation needs none of them.
+
 
 ### 3.1 Network Setup
 
@@ -302,7 +321,7 @@ There are two simulation scenes, each with its own launch file and MuJoCo world:
 **A. pHRI / manipulation scene** — object-aware impedance control, estimation, jog, etc.
 
 ```bash
-roslaunch icir_phri_panda_husky ns1_phri_simulation_w_viz.launch
+ros2 launch icir_phri_panda_husky ns1_phri_simulation_w_viz.launch.py
 ```
 
 **B. Path-planning scene** — mobile-base navigation around obstacles (keys `6` / `7`).
@@ -310,13 +329,13 @@ This launch additionally **auto-starts the path-planner server** and **auto-load
 scene's obstacles**, so nothing else is needed:
 
 ```bash
-roslaunch icir_phri_panda_husky ns1_path_simulation_w_viz.launch
+ros2 launch icir_phri_panda_husky ns1_path_simulation_w_viz.launch.py
 ```
 
 In a separate terminal, launch the CLI (optional, either scene):
 
 ```bash
-rosrun icir_phri_panda_husky ns1_simulation.py
+ros2 run icir_phri_panda_husky ns1_simulation.py
 ```
 
 > **Scenes are independent.** The path-planner server and obstacle loading are wired only
@@ -327,6 +346,11 @@ rosrun icir_phri_panda_husky ns1_simulation.py
 ---
 
 ### 4.2 Real Robot
+
+> **ROS 1 only.** The real-robot path is not ported yet: `franka_ros`, `husky` and
+> `icir_robotiq` have no ROS 2 build, and `src/phri_real.cpp` is still commented out in
+> `CMakeLists.txt`. The commands below are kept for reference and describe the ROS 1 setup.
+
 
 > Before running, unlock the robot and activate FCI in Panda Desk (`192.168.10.52`).
 
@@ -544,7 +568,7 @@ only when one of these is required:
 
 Modes `6` and `7` obtain their base path from the separate **`icir_path_planner`**
 package. The path-planning launch (scene **B**) starts its service server automatically;
-to run the server standalone use `roslaunch icir_path_planner_ros_interface server.launch`.
+to run the server standalone use `ros2 launch icir_path_planner_ros_interface server.launch.py`.
 See that package's
 [README](../icir_path_planner/icir_path_planner_ros_interface/README.md) for details.
 
@@ -580,7 +604,7 @@ planner reports *"no valid initial states"*).
 - Verify `robot_ip` parameter matches the actual Panda IP
 
 **Controller fails to spawn**
-- Check URDF and controller yaml are loaded correctly: `rosparam list`
+- Check URDF and controller yaml are loaded correctly: `ros2 param list`
 
 ---
 
