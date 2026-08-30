@@ -1,0 +1,42 @@
+# ros2_control 컨트롤러 설정 (ROS1 controller config의 ROS2 포팅본).
+#
+# ROS1과 달라진 점: ROS1은 <rosparam command="load">로 이 파일을 전역 파라미터
+# 서버에 통째로 올렸고, controller_manager가 컨트롤러 이름 아래를 읽어갔다.
+# ROS2에서는 노드별 `ros__parameters` 아래로 들어가고, 컨트롤러 `type`은
+# controller_manager가 스폰할 때 알아야 하므로 controller_manager 쪽에 적는다.
+#
+# ⚠ 아직 살아있지 않다. 컨트롤러 플러그인(pHRIFrankaHuskyController)이
+# controller_interface::ControllerInterface 기반으로 포팅되어야 스폰된다
+# (계획서 R2). 지금은 실기 launch가 이 파일을 참조만 하고 스폰은 막아둔 상태.
+#
+# 중첩(collision_config.*)은 ROS2에서 점 표기 파라미터 이름으로 평탄화된다.
+# 예: collision_config.lower_torque_thresholds_acceleration
+
+controller_manager:
+  ros__parameters:
+    update_rate: 1000  # [Hz]
+
+    phri_franka_husky_controller:
+      type: icir_franka_husky_controllers/pHRIFrankaHuskyController
+
+phri_franka_husky_controller:
+  ros__parameters:
+    arm_id: panda
+    joint_names:
+      - panda_joint1
+      - panda_joint2
+      - panda_joint3
+      - panda_joint4
+      - panda_joint5
+      - panda_joint6
+      - panda_joint7
+    # Configure the initial defaults for the collision behavior reflexes.
+    collision_config:
+      lower_torque_thresholds_acceleration: [100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0]  # [Nm]
+      upper_torque_thresholds_acceleration: [100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0]  # [Nm]
+      lower_torque_thresholds_nominal: [100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0]  # [Nm]
+      upper_torque_thresholds_nominal: [100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0]  # [Nm]
+      lower_force_thresholds_acceleration: [100.0, 100.0, 100.0, 100.0, 100.0, 100.0]  # [N, N, N, Nm, Nm, Nm]
+      upper_force_thresholds_acceleration: [100.0, 100.0, 100.0, 100.0, 100.0, 100.0]  # [N, N, N, Nm, Nm, Nm]
+      lower_force_thresholds_nominal: [100.0, 100.0, 100.0, 100.0, 100.0, 100.0]  # [N, N, N, Nm, Nm, Nm]
+      upper_force_thresholds_nominal: [100.0, 100.0, 100.0, 100.0, 100.0, 100.0]  # [N, N, N, Nm, Nm, Nm]

@@ -1,0 +1,56 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>icir_phri_panda_husky</name>
+  <version>0.0.1</version>
+  <description>The icir_phri panda husky package</description>
+
+  <maintainer email="js.park@cnu.ac.kr">Jinseong Park</maintainer>
+
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+
+  <exec_depend>rclpy</exec_depend>
+
+  <!-- C++ 컨트롤러 (panda_husky_hqp / phri_simul) -->
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>tf2_ros</depend>
+  <depend>ament_index_cpp</depend>
+  <depend>eigen</depend>
+  <depend>pinocchio</depend>
+  <depend>icir_hqp_controller</depend>
+  <depend>icir_object_estimation</depend>
+  <depend>icir_path_planner_ros_interface</depend>
+  <depend>icir_phri_msgs</depend>
+  <depend>mujoco_ros2_control_msgs</depend>
+
+  <!-- ===== 보류: 실기 컨트롤러(phri_real)용 =====
+       CMakeLists.txt의 동명 블록과 함께 살아난다. 서드파티 ROS2 포팅본이 아직
+       워크스페이스에 없어 지금 선언하면 rosdep이 해결하지 못하므로 주석으로 둔다.
+
+       서드파티 교체 대기 (계획서 R1/R5):
+         franka_hw, libfranka          -> 커뮤니티 Panda ROS2 포팅본
+         robotiq_2f_gripper_control    -> ros2_robotiq_gripper
+         robotiq_2f_gripper_msgs
+
+       ROS2 표준 (설치돼 있으나 phri_real이 살아날 때 켠다):
+         controller_interface, hardware_interface, pluginlib, realtime_tools
+
+       폐기 (계획서 R3/R4):
+         dynamic_reconfigure -> ROS2 파라미터 + add_on_set_parameters_callback
+         mujoco_ros_msgs     -> mujoco_ros2_control_msgs/JointSet
+         tf                  -> tf2_ros
+         roscpp/rospy/roslib -> rclcpp/rclpy
+  ============================================================================ -->
+
+  <export>
+    <build_type>ament_cmake</build_type>
+    <!-- 보류: 실기 컨트롤러(phri_real)가 살아나면 함께 켠다.
+    <controller_interface plugin="${prefix}/icir_phri_panda_husky_plugin.xml"/>
+    -->
+  </export>
+</package>

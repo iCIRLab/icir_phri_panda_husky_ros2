@@ -1,0 +1,54 @@
+# EKF 공분산 튜닝 값 (ROS1 cfg/ekf_param.cfg 의 ROS2 포팅본).
+#
+# 객체 파라미터 [m, cx, cy, cz, Ixx, Ixy, Ixz, Iyy, Iyz, Izz] 추정용 EKF의
+# 프로세스 잡음 Q(대각 10개)와 측정 잡음 R(대각 6개, 힘 3 + 모멘트 3).
+#
+# ROS1과 달라진 점
+# ----------------
+# ROS1은 dynamic_reconfigure(.cfg)로 이 값들을 런타임에 슬라이더로 돌렸다. ROS2엔
+# dynamic_reconfigure가 없고, 대신 노드 파라미터가 원래부터 런타임 변경 가능하다
+# (`ros2 param set`, rqt_reconfigure). 그래서 .cfg는 없애고 여기 기본값을 두고,
+# 컨트롤러가 파라미터로 선언한 뒤 add_on_set_parameters_callback 으로 변경을
+# 받는다 (계획서 R4).
+#
+# ⚠ 아직 살아있지 않다. 이 값을 읽어가는 phri_real.cpp 의 ekfParamCallback 이
+#    ROS2로 포팅되어야 한다. 지금은 튜닝 값을 잃지 않도록 형식만 옮겨둔 것이다.
+#
+# 포팅할 때 declare_parameter 에 붙일 범위 (ROS1 .cfg의 min/max 그대로):
+#   Q0~Q9 : [0.0, 1.0]
+#   R0~R5 : [0.0, 10000.0]
+# rqt_reconfigure에서 슬라이더로 쓰려면 FloatingPointRange 로 넣어야 한다.
+
+phri_franka_husky_controller:
+  ros__parameters:
+    ekf:
+      # --- 프로세스 잡음 Q (대각) ---
+      Q0: 0.000001    # mass
+      Q1: 0.0000001   # com x
+      Q2: 0.000001    # com y
+      Q3: 0.00000001  # com z
+      Q4: 0.0         # Ixx
+      Q5: 0.0         # Ixy
+      Q6: 0.0         # Ixz
+      Q7: 0.0         # Iyy
+      Q8: 0.0         # Iyz
+      Q9: 0.0         # Izz
+
+      # --- 측정 잡음 R (대각) ---
+      # 아래 값은 shelf 세팅 기준이다. ROS1 .cfg 주석에 profile 세팅용 대안이
+      # 같이 적혀 있었다: R0=50, R3=20.
+      R0: 5000.0      # Fx
+      R1: 3000.0      # Fy
+      R2: 3000.0      # Fz
+      R3: 2000.0      # Wx
+      R4: 4000.0      # Wy
+      R5: 3000.0      # Wz
+
+# ROS1 .cfg에 주석 처리된 채 남아 있던 또 다른 세트(move/static 세팅으로 보인다).
+# 어느 실험 조건의 값인지 기록이 없어 그대로 옮겨만 둔다.
+#
+#   Q0: 0.00001    Q1: 0.0000001  Q2: 0.00001   Q3: 0.00000001
+#   Q4~Q9: 0.0
+#   R0: 200.0   # 200 for move, 250 for static
+#   R1: 1000.0  R2: 1000.0
+#   R3: 1000.0  R4: 1000.0  R5: 50.0
