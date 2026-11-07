@@ -171,6 +171,11 @@ class ControlSuiteShell(cmd.Cmd):
         self._pub('8')
         print("long-range whole-body motion")
 
+    def do_nav2(self, arg):
+        'Nav2 autonomous driving: base follows /ns1/cmd_vel, arm holds posture [9]'
+        self._pub('9')
+        print("Nav2 mode: follow /ns1/cmd_vel with arm posture maintenance")
+
     # ------------- cmd ----------------------------------------------------
     def do_estimation(self, arg):
         'Start object estimation [q]'

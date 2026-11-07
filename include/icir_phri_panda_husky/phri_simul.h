@@ -25,6 +25,7 @@
 #include "geometry_msgs/msg/twist.hpp"
 #include "geometry_msgs/msg/vector3.hpp"
 #include "geometry_msgs/msg/wrench.hpp"
+#include "nav_msgs/msg/odometry.hpp"
 #include "icir_phri_msgs/msg/object_parameter.hpp"
 
 // System — keyboard_fd() 가 /dev/tty 를 여는 데 쓴다
@@ -76,6 +77,15 @@ void setRobotCommand();
 void setGripperCommand();
 void getEEState();
 void getBaseState();
+
+//////////////////// Nav2 (mode 106) /////////////////
+// cmd_vel: always subscribed, used only in mode 106.
+// odom: published only if publish_odom is true (set by the Nav2 launch).
+rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_pub_;
+int odom_decim_ = 0;
+void cmdVelCallback(const geometry_msgs::msg::Twist::SharedPtr msg);
+void odom_publish(const sensor_msgs::msg::JointState& msg, const builtin_interfaces::msg::Time& stamp);
+////////////////////////////////////////////////////////
 
 //////////////////// object estimation /////////////////
 EKF * ekf;

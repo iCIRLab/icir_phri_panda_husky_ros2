@@ -1,5 +1,7 @@
 #include "icir_phri_panda_husky/panda_husky_hqp.h"
 #include <ament_index_cpp/get_package_share_directory.hpp>
+#include <algorithm>
+#include <cmath>
 
 using namespace pinocchio;
 using namespace Eigen;
@@ -526,6 +528,14 @@ namespace RobotController{
         RCLCPP_INFO_ONCE(node_->get_logger(),
                          "[obstacles] loaded %d obstacle(s) from param (margin=%.2f)",
                          (int)mobile_path_req_.obstacles2d.size(), margin);
+    }
+
+    // Receive Nav2 cmd_vel (used by mode 106).
+    void FrankaHuskyWrapper::navcmd_update(double v, double w){
+        if (!std::isfinite(v) || !std::isfinite(w)) return;
+        nav_v_cmd_    = v;
+        nav_w_cmd_    = w;
+        nav_cmd_time_ = time_;
     }
 
     void FrankaHuskyWrapper::updatePosture() {
@@ -1485,6 +1495,91 @@ namespace RobotController{
                 RCLCPP_INFO_THROTTLE(node_->get_logger(), *node_->get_clock(), 500, "[105] node: %d / %d, pos: %.2f %.2f theta: %.2f",
                     (int)node_index_, (int)node_num_,
                     mb_.translation()(0), mb_.translation()(1), th_);
+            }
+        }
+
+        //---------------------------------------------------------------------------------------------------------//
+        //------------------------------------- Nav2 cmd_vel following --------------------------------------------//
+        //---------------------------------------------------------------------------------------------------------//
+        // Base follows Nav2 cmd_vel (v, w); arm holds its posture via HQP.
+        // Wheel torques come from a PI loop on the measured base velocity and overwrite the HQP
+        // wheel output (like mode 103). The mobile task (104/105) did not track skid-steer turning well.
+        if (ctrl_mode_ == 106){ //9
+            if (mode_change_){
+                resetAllTasks();
+
+                tsid_->addMotionTask(*postureTask_, 1e-6, 1);
+                tsid_->addMotionTask(*torqueBoundsTask_, 1.0, 0);
+
+                initPostureTraj(1.0, JointMoveType::Hold);
+
+                // Limits and gains (ROS params, defaults below)
+                nav_cmd_timeout_ = declare_or_get<double>("nav_cmd_timeout", 0.5);    // [s]
+                nav_max_lin_vel_ = declare_or_get<double>("nav_max_lin_vel", 0.5);    // [m/s]
+                nav_max_ang_vel_ = declare_or_get<double>("nav_max_ang_vel", 1.0);    // [rad/s]
+                nav_max_lin_acc_ = declare_or_get<double>("nav_max_lin_acc", 1.0);    // [m/s^2]
+                nav_max_ang_acc_ = declare_or_get<double>("nav_max_ang_acc", 2.0);    // [rad/s^2]
+                // wheel torque = PI(v error) -/+ PI(w error) [Nm]
+                nav_kp_v_          = declare_or_get<double>("nav_kp_v", 200.0);
+                nav_ki_v_          = declare_or_get<double>("nav_ki_v", 400.0);
+                nav_kp_w_          = declare_or_get<double>("nav_kp_w", 40.0);
+                nav_ki_w_          = declare_or_get<double>("nav_ki_w", 100.0);
+                nav_max_wheel_tau_ = declare_or_get<double>("nav_max_wheel_torque", 80.0);   // [Nm]
+
+                nav_v_ref_ = nav_w_ref_ = 0.0;
+                nav_v_cmd_ = nav_w_cmd_ = 0.0;
+                nav_i_v_ = nav_i_w_ = 0.0;
+                nav_cmd_time_  = -1.0e9;  // ignore cmd_vel received before entering
+                nav_prev_time_ = time_;
+
+                mode_change_ = false;
+                RCLCPP_INFO(node_->get_logger(),
+                    "[106] Nav2 cmd_vel following: base(%.2f, %.2f, %.2f), limits v=%.2f w=%.2f, wheel torque %.0f Nm",
+                    state_.q_(0), state_.q_(1), state_.q_(2), nav_max_lin_vel_, nav_max_ang_vel_, nav_max_wheel_tau_);
+            }
+
+            updatePosture();
+            solveHQP();
+
+            if (ismobile_) {
+                // Use the real sim-time step; only guard against large jumps (e.g. sim reset)
+                const double dt = std::clamp(time_ - nav_prev_time_, 0.0, 0.1);
+                nav_prev_time_ = time_;
+
+                // 1) Latest cmd_vel (stop on timeout) with velocity/accel limits
+                double v_cmd = std::clamp(nav_v_cmd_, -nav_max_lin_vel_, nav_max_lin_vel_);
+                double w_cmd = std::clamp(nav_w_cmd_, -nav_max_ang_vel_, nav_max_ang_vel_);
+                if (time_ - nav_cmd_time_ > nav_cmd_timeout_) v_cmd = w_cmd = 0.0;
+                nav_v_ref_ += std::clamp(v_cmd - nav_v_ref_, -nav_max_lin_acc_*dt, nav_max_lin_acc_*dt);
+                nav_w_ref_ += std::clamp(w_cmd - nav_w_ref_, -nav_max_ang_acc_*dt, nav_max_ang_acc_*dt);
+
+                // 2) Measured base velocity (forward speed, yaw rate)
+                const double th = state_.q_(2);
+                const double v_meas = cos(th)*state_.v_(0) + sin(th)*state_.v_(1);
+                const double w_meas = state_.v_(2);
+                const double e_v = nav_v_ref_ - v_meas;
+                const double e_w = nav_w_ref_ - w_meas;
+
+                // 3) PI; reset integrators when idle so the base does not creep
+                const bool idle = (v_cmd == 0.0 && w_cmd == 0.0 && nav_v_ref_ == 0.0 && nav_w_ref_ == 0.0);
+                if (idle) {
+                    nav_i_v_ = nav_i_w_ = 0.0;
+                } else {
+                    // anti-windup
+                    nav_i_v_ = std::clamp(nav_i_v_ + e_v*dt, -nav_max_wheel_tau_/nav_ki_v_, nav_max_wheel_tau_/nav_ki_v_);
+                    nav_i_w_ = std::clamp(nav_i_w_ + e_w*dt, -nav_max_wheel_tau_/nav_ki_w_, nav_max_wheel_tau_/nav_ki_w_);
+                }
+                const double u_v = nav_kp_v_*e_v + nav_ki_v_*nav_i_v_;
+                const double u_w = nav_kp_w_*e_w + nav_ki_w_*nav_i_w_;
+
+                // 4) Wheel torques: 0 = left, 1 = right (+ = forward)
+                state_.torque_(0) = std::clamp(u_v - u_w, -nav_max_wheel_tau_, nav_max_wheel_tau_);
+                state_.torque_(1) = std::clamp(u_v + u_w, -nav_max_wheel_tau_, nav_max_wheel_tau_);
+
+                RCLCPP_INFO_THROTTLE(node_->get_logger(), *node_->get_clock(), 2000,
+                    "[106] cmd(v=%.2f w=%.2f) ref(v=%.2f w=%.2f) meas(v=%.2f w=%.2f) base(%.2f, %.2f, %.2f) tau(%.1f, %.1f)",
+                    v_cmd, w_cmd, nav_v_ref_, nav_w_ref_, v_meas, w_meas,
+                    state_.q_(0), state_.q_(1), state_.q_(2), state_.torque_(0), state_.torque_(1));
             }
         }
 

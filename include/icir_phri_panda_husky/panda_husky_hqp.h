@@ -144,6 +144,7 @@ namespace RobotController{
             void EstimationMotion();
             void resetAllTasks();
             void setMujocoObstacles(); // fill path-planner request from the /<ns>/obstacles rosparam (auto-loaded from mujoco obs_* geoms)
+            void navcmd_update(double v, double w); // Nav2 cmd_vel (base frame: v [m/s], w [rad/s]) for mode 106
 
             int ctrltype(){
                 return ctrl_mode_;
@@ -195,6 +196,15 @@ namespace RobotController{
             Vector3d wbd_pos_;
             double   wbd_duration_;
             WBDMoveType wbd_move_type_;
+
+            // mode 106 (Nav2 cmd_vel following)
+            double   nav_v_cmd_{0.0}, nav_w_cmd_{0.0};   // latest cmd_vel (base frame)
+            double   nav_cmd_time_{-1.0e9};              // time of latest cmd_vel [s]
+            double   nav_prev_time_{0.0};                // previous loop time [s] (sim time)
+            double   nav_v_ref_{0.0}, nav_w_ref_{0.0};   // accel-limited reference velocity
+            double   nav_i_v_{0.0}, nav_i_w_{0.0};       // PI integrators
+            double   nav_cmd_timeout_, nav_max_lin_vel_, nav_max_ang_vel_, nav_max_lin_acc_, nav_max_ang_acc_;
+            double   nav_kp_v_, nav_ki_v_, nav_kp_w_, nav_ki_w_, nav_max_wheel_tau_;
 
             //hqp
             std::shared_ptr<icirhqp::robot::RobotWrapper> robot_;

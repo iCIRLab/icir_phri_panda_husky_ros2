@@ -19,6 +19,7 @@
   <depend>std_msgs</depend>
   <depend>sensor_msgs</depend>
   <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
   <depend>tf2_ros</depend>
   <depend>ament_index_cpp</depend>
   <depend>eigen</depend>
@@ -28,6 +29,7 @@
   <depend>icir_path_planner_ros_interface</depend>
   <depend>icir_phri_msgs</depend>
   <depend>mujoco_ros2_control_msgs</depend>
+  <exec_depend>icir_navigation</exec_depend>
 
   <!-- ===== 보류: 실기 컨트롤러(phri_real)용 =====
        CMakeLists.txt의 동명 블록과 함께 살아난다. 서드파티 ROS2 포팅본이 아직

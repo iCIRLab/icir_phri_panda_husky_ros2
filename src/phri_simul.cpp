@@ -27,7 +27,9 @@ int main(int argc, char **argv)
     cout << "ismobile   " << ismobile_ << endl;
     cout << "issimulation   " << issimulation_ << endl;    
     cout << "iscalibration   " << iscalibration_ << endl;
-   
+    // true only in the Nav2 launch (publishes odom); other launches leave it false.
+    const bool ispublishodom = node_->declare_parameter<bool>("publish_odom", false);
+
     ctrl_ = new RobotController::FrankaHuskyWrapper(group_name, issimulation_, ismobile_, isrobotiq_, iscalibration_, node_); 
     ctrl_->initialize();    
     ctrl_->get_dt(dt);
@@ -78,7 +80,12 @@ int main(int argc, char **argv)
 
     //husky_odom
     if (ismobile_) br_ = std::make_shared<tf2_ros::TransformBroadcaster>(node_);
-    
+
+    /////////////// Nav2 (mode 106) ///////////////
+    auto cmd_vel_sub = node_->create_subscription<geometry_msgs::msg::Twist>(
+        "cmd_vel", 10, &cmdVelCallback);
+    if (ismobile_ && ispublishodom) odom_pub_ = node_->create_publisher<nav_msgs::msg::Odometry>("odom", 10);
+
     // msg 
     ee_state_msg_ = geometry_msgs::msg::Transform();  // obtained from "robot_->position"
     if (ismobile_) {
@@ -441,7 +448,10 @@ void JointStateCallback(const sensor_msgs::msg::JointState::SharedPtr msg){
         transform.transform.rotation.x = msg_tmp.position[4];
         transform.transform.rotation.y = msg_tmp.position[5];
         transform.transform.rotation.z = msg_tmp.position[6];
-        br_->sendTransform(transform);       
+        br_->sendTransform(transform);
+
+        // Odom for Nav2 (only if publish_odom is true); same pose/stamp as the tf.
+        if (odom_pub_) odom_publish(msg_tmp, transform.header.stamp);
 
         v_mujoco.setZero();
         a_mujoco.setZero();    
@@ -467,6 +477,44 @@ void JointStateCallback(const sensor_msgs::msg::JointState::SharedPtr msg){
     double alpha = dt / (RC + dt);
 
     a_mujoco_filtered = alpha * a_mujoco + (1 - alpha) * a_mujoco_filtered;            
+}
+
+void odom_publish(const sensor_msgs::msg::JointState& msg, const builtin_interfaces::msg::Time& stamp){
+    if (++odom_decim_ < 20) return;
+    odom_decim_ = 0;
+
+    nav_msgs::msg::Odometry odom;
+    odom.header.stamp    = stamp;
+    odom.header.frame_id = "husky_odom";
+    odom.child_frame_id  = group_name + "_rviz_base_link";
+    odom.pose.pose.position.x    = msg.position[0];
+    odom.pose.pose.position.y    = msg.position[1];
+    odom.pose.pose.position.z    = msg.position[2];
+    odom.pose.pose.orientation.w = msg.position[3];
+    odom.pose.pose.orientation.x = msg.position[4];
+    odom.pose.pose.orientation.y = msg.position[5];
+    odom.pose.pose.orientation.z = msg.position[6];
+
+    const Quaterniond q(msg.position[3], msg.position[4], msg.position[5], msg.position[6]);
+    const Vector3d v_body = q.conjugate() * Vector3d(msg.velocity[0], msg.velocity[1], msg.velocity[2]);
+    odom.twist.twist.linear.x  = v_body(0);
+    odom.twist.twist.linear.y  = v_body(1);
+    odom.twist.twist.linear.z  = v_body(2);
+    odom.twist.twist.angular.x = msg.velocity[3];
+    odom.twist.twist.angular.y = msg.velocity[4];
+    odom.twist.twist.angular.z = msg.velocity[5];
+
+    const double cov[6] = {1e-4, 1e-4, 1e-4, 1e-4, 1e-4, 1e-4};
+    for (int i = 0; i < 6; i++) {
+        odom.pose.covariance[7*i]  = cov[i];
+        odom.twist.covariance[7*i] = cov[i];
+    }
+    odom_pub_->publish(odom);
+}
+
+void cmdVelCallback(const geometry_msgs::msg::Twist::SharedPtr msg){
+    // cmd_vel from Nav2 (base frame); stored always, used only in mode 106.
+    ctrl_->navcmd_update(msg->linear.x, msg->angular.z);
 }
 
 void joint_states_publish(const sensor_msgs::msg::JointState& msg){
@@ -767,8 +815,15 @@ void process_key(int key){
                 ctrl_->ctrl_update(msg, WBDMoveType::DeltaInGlobal, Vector3d(2.3, 1.5, -0.1), 5.0);
                 cout << " " << endl;
                 cout << "test move: long range wholebody motion for 2.3x & 1.5y & -0.1z ee pos in local coordinate" << endl;
-                cout << " " << endl;                    
-                break;  
+                cout << " " << endl;
+                break;
+            case '9': //Nav2 autonomous driving: follow Nav2 cmd_vel with joint posture maintenance
+                msg = 106;
+                ctrl_->ctrl_update(msg);
+                cout << " " << endl;
+                cout << "Nav2 mode: follow /" << group_name << "/cmd_vel with maintaining arm posture" << endl;
+                cout << " " << endl;
+                break;
 
             //---------------------- cmd -------------------------------------------------//             
             case 'q': //object estimation
